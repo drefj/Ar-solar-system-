@@ -19,13 +19,22 @@
   html,body{margin:0;padding:0;height:100%;
     font-family: 'Courier New', ui-monospace, monospace; color:var(--ink); overflow:hidden;}
 
-  a-scene, a-scene canvas, video {
+  #arjs-video {
     position: fixed !important;
     top: 0 !important;
     left: 0 !important;
     width: 100vw !important;
     height: 100vh !important;
-    object-fit: cover;
+    object-fit: cover !important;
+    z-index: 0 !important;
+  }
+  .a-canvas {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    z-index: 1 !important;
   }
 
   #hud-top{
