@@ -16,9 +16,17 @@
     --signal:#ffb454;
   }
   *{box-sizing:border-box;}
-  html,body{margin:0;padding:0;height:100%;background:var(--void);
+  html,body{margin:0;padding:0;height:100%;
     font-family: 'Courier New', ui-monospace, monospace; color:var(--ink); overflow:hidden;}
-  a-scene{position:absolute;inset:0;}
+
+  a-scene, a-scene canvas, video {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    object-fit: cover;
+  }
 
   #hud-top{
     position:fixed; top:0; left:0; right:0; z-index:20;
@@ -38,15 +46,12 @@
     text-align:center; font-size:11px; color:var(--dim); letter-spacing:0.04em;
     pointer-events:none;
   }
-  #hint.hidden{display:none;}
-
   #marker-btn{
     position:fixed; top:14px; right:16px; z-index:25;
     background:var(--panel); border:1px solid var(--line); color:var(--signal);
     font-family:inherit; font-size:10px; letter-spacing:0.1em; text-transform:uppercase;
     padding:8px 10px; border-radius:2px;
   }
-
   #card{
     position:fixed; left:12px; right:12px; bottom:0; z-index:30;
     background:var(--panel); border:1px solid var(--line); border-bottom:none;
@@ -101,19 +106,15 @@
 <a-scene
   embedded
   vr-mode-ui="enabled: false"
-  renderer="logarithmicDepthBuffer: true; alpha: true"
-  arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix;"
+  arjs="sourceType: webcam; debugUIEnabled: false;"
 >
-  <a-assets></a-assets>
-
   <a-marker preset="hiro" id="marker" emitevents="true">
 
-    <a-entity id="orbit-group" rotation="0 0 0" animation="property: rotation; to: 0 360 0; loop: true; dur: 40000; easing: linear">
+    <a-entity id="orbit-group" animation="property: rotation; to: 0 360 0; loop: true; dur: 40000; easing: linear">
 
       <a-sphere class="body" data-name="The Sun" data-cat="00" data-type="Star · G2V"
         data-fact="Not a planet at all — the Sun is the star our whole system orbits. It holds 99.8% of the system's mass and fuses hydrogen into helium at its core, releasing the light that reaches your eyes eight minutes later."
-        radius="0.28" position="0 0.28 0" color="#FFB454"
-        material="emissive:#7a4a00; emissiveIntensity:0.6; shader:standard"></a-sphere>
+        radius="0.28" position="0 0.28 0" color="#FFB454"></a-sphere>
 
       <a-sphere class="body" data-name="Mercury" data-cat="01" data-type="Terrestrial planet"
         data-fact="The closest planet to the Sun and the smallest in the system. It has virtually no atmosphere to trap heat, so its surface swings from 430°C in daylight to -180°C at night."
