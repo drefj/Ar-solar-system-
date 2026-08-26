@@ -1,17 +1,176 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Observatory AR — Solar System</title>
 <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+<style>
+  :root{
+    --void:#0a0d16;
+    --panel:#11162a;
+    --line: rgba(180,196,255,0.18);
+    --ink:#dfe6ff;
+    --dim:#7c88b8;
+    --signal:#ffb454;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;background:var(--void);
+    font-family: 'Courier New', ui-monospace, monospace; color:var(--ink); overflow:hidden;}
+  a-scene{position:absolute;inset:0;}
+
+  #hud-top{
+    position:fixed; top:0; left:0; right:0; z-index:20;
+    padding:14px 16px 10px;
+    background:linear-gradient(180deg, rgba(10,13,22,0.92) 0%, rgba(10,13,22,0) 100%);
+    pointer-events:none;
+  }
+  #hud-top .catalog{
+    font-size:10px; letter-spacing:0.18em; color:var(--dim); text-transform:uppercase;
+  }
+  #hud-top h1{
+    margin:2px 0 0; font-size:16px; font-weight:600; letter-spacing:0.02em;
+    font-family: Georgia, 'Times New Roman', serif; font-style:italic; color:var(--ink);
+  }
+  #hint{
+    position:fixed; bottom:16px; left:16px; right:16px; z-index:20;
+    text-align:center; font-size:11px; color:var(--dim); letter-spacing:0.04em;
+    pointer-events:none;
+  }
+  #hint.hidden{display:none;}
+
+  #marker-btn{
+    position:fixed; top:14px; right:16px; z-index:25;
+    background:var(--panel); border:1px solid var(--line); color:var(--signal);
+    font-family:inherit; font-size:10px; letter-spacing:0.1em; text-transform:uppercase;
+    padding:8px 10px; border-radius:2px;
+  }
+
+  #card{
+    position:fixed; left:12px; right:12px; bottom:0; z-index:30;
+    background:var(--panel); border:1px solid var(--line); border-bottom:none;
+    border-radius:6px 6px 0 0; padding:16px 18px 22px;
+    transform:translateY(110%); transition:transform 0.28s ease;
+    box-shadow:0 -8px 30px rgba(0,0,0,0.5);
+  }
+  #card.open{transform:translateY(0);}
+  #card .row{display:flex; align-items:baseline; justify-content:space-between; gap:10px;}
+  #card .id{font-size:10px; color:var(--dim); letter-spacing:0.16em; text-transform:uppercase;}
+  #card h2{
+    margin:4px 0 10px; font-size:22px; font-family: Georgia, 'Times New Roman', serif;
+    font-style:italic; color:var(--signal); font-weight:600;
+  }
+  #card .data{
+    display:grid; grid-template-columns:1fr 1fr; gap:6px 16px; margin-bottom:12px;
+    font-size:11px; color:var(--dim); border-top:1px solid var(--line); border-bottom:1px solid var(--line);
+    padding:8px 0;
+  }
+  #card .data b{color:var(--ink); font-weight:600;}
+  #card p{margin:0; font-size:13px; line-height:1.5; color:var(--ink);}
+  #close{
+    background:none; border:1px solid var(--line); color:var(--dim);
+    width:26px; height:26px; border-radius:50%; font-size:14px; line-height:1;
+    font-family:inherit;
+  }
+</style>
 </head>
-<body style="margin:0; overflow:hidden;">
-<a-scene embedded vr-mode-ui="enabled: false" arjs="sourceType: webcam; debugUIEnabled: false;">
-  <a-marker preset="hiro">
-    <a-box position="0 0.5 0" color="red"></a-box>
+<body>
+
+<div id="hud-top">
+  <div class="catalog">Field Log · Sol System</div>
+  <h1>Point at the marker to begin</h1>
+</div>
+
+<button id="marker-btn" onclick="window.open('https://raw.githubusercontent.com/AR-js-org/AR.js/master/data/images/hiro.png','_blank')">Open Marker ↗</button>
+
+<div id="hint">Tap a body to log its entry</div>
+
+<div id="card">
+  <div class="row">
+    <div>
+      <div class="id" id="card-id">CAT. 00</div>
+      <h2 id="card-name">—</h2>
+    </div>
+    <button id="close" onclick="closeCard()">✕</button>
+  </div>
+  <div class="data" id="card-data"></div>
+  <p id="card-text"></p>
+</div>
+
+<a-scene
+  embedded
+  vr-mode-ui="enabled: false"
+  renderer="logarithmicDepthBuffer: true; alpha: true"
+  arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix;"
+>
+  <a-assets></a-assets>
+
+  <a-marker preset="hiro" id="marker" emitevents="true">
+
+    <a-entity id="orbit-group" rotation="0 0 0" animation="property: rotation; to: 0 360 0; loop: true; dur: 40000; easing: linear">
+
+      <a-sphere class="body" data-name="The Sun" data-cat="00" data-type="Star · G2V"
+        data-fact="Not a planet at all — the Sun is the star our whole system orbits. It holds 99.8% of the system's mass and fuses hydrogen into helium at its core, releasing the light that reaches your eyes eight minutes later."
+        radius="0.28" position="0 0.28 0" color="#FFB454"
+        material="emissive:#7a4a00; emissiveIntensity:0.6; shader:standard"></a-sphere>
+
+      <a-sphere class="body" data-name="Mercury" data-cat="01" data-type="Terrestrial planet"
+        data-fact="The closest planet to the Sun and the smallest in the system. It has virtually no atmosphere to trap heat, so its surface swings from 430°C in daylight to -180°C at night."
+        radius="0.05" position="0.55 0.28 0" color="#9c9c9c"></a-sphere>
+
+      <a-sphere class="body" data-name="Venus" data-cat="02" data-type="Terrestrial planet"
+        data-fact="The hottest planet in the system, thanks to a thick carbon dioxide atmosphere that traps heat in a runaway greenhouse effect. It also spins backwards compared to most planets."
+        radius="0.09" position="0.85 0.28 0" color="#e8c27a"></a-sphere>
+
+      <a-sphere class="body" data-name="Earth" data-cat="03" data-type="Terrestrial planet"
+        data-fact="The only known place with liquid water on its surface, plate tectonics, and life. Its single large moon stabilizes the tilt of its axis, keeping seasons regular over long timescales."
+        radius="0.095" position="1.15 0.28 0" color="#3f7fd9"></a-sphere>
+
+      <a-sphere class="body" data-name="Mars" data-cat="04" data-type="Terrestrial planet"
+        data-fact="The 'Red Planet' owes its color to iron oxide dust on its surface. It hosts Olympus Mons, the tallest known volcano in the solar system, roughly three times the height of Everest."
+        radius="0.06" position="1.45 0.28 0" color="#c1440e"></a-sphere>
+
+      <a-sphere class="body" data-name="Jupiter" data-cat="05" data-type="Gas giant"
+        data-fact="The largest planet by far — more massive than every other planet combined. Its Great Red Spot is a storm wider than Earth that has raged for at least 350 years."
+        radius="0.22" position="1.95 0.28 0" color="#c99b6a"></a-sphere>
+
+    </a-entity>
+
   </a-marker>
+
   <a-entity camera></a-entity>
 </a-scene>
+
+<script>
+  const card = document.getElementById('card');
+  const hint = document.getElementById('hint');
+  const hudH1 = document.querySelector('#hud-top h1');
+
+  function openCard(el){
+    document.getElementById('card-id').textContent = 'CAT. ' + el.getAttribute('data-cat');
+    document.getElementById('card-name').textContent = el.getAttribute('data-name');
+    document.getElementById('card-text').textContent = el.getAttribute('data-fact');
+    document.getElementById('card-data').innerHTML =
+      '<div><b>Class</b><br>' + el.getAttribute('data-type') + '</div>' +
+      '<div><b>Status</b><br>Logged this session</div>';
+    card.classList.add('open');
+  }
+  function closeCard(){ card.classList.remove('open'); }
+
+  document.querySelectorAll('.body').forEach(el=>{
+    el.addEventListener('click', ()=> openCard(el));
+  });
+
+  const marker = document.getElementById('marker');
+  marker.addEventListener('markerFound', ()=>{
+    hudH1.textContent = 'Marker acquired';
+    hint.classList.remove('hidden');
+  });
+  marker.addEventListener('markerLost', ()=>{
+    hudH1.textContent = 'Point at the marker to begin';
+  });
+</script>
+
 </body>
 </html>
