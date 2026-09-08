@@ -3,39 +3,55 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-<title>Wall Art AR Preview</title>
+<title>Wall Art Preview (Lite)</title>
 <style>
-  html, body { margin:0; padding:0; height:100%; overflow:hidden;
-    font-family: system-ui, sans-serif; background:#111; color:#eee; }
+  html, body { margin:0; padding:0; height:100%; overflow:hidden; background:#000;
+    font-family: system-ui, sans-serif; color:#eee; }
+  #video, #three-canvas {
+    position:fixed; top:0; left:0; width:100vw; height:100vh; object-fit:cover;
+  }
+  #video { z-index:0; }
+  #three-canvas { z-index:1; pointer-events:none; }
   #overlay {
     position:fixed; left:0; right:0; bottom:0; z-index:10;
     padding:14px 16px calc(16px + env(safe-area-inset-bottom));
-    background:rgba(10,10,14,0.85); backdrop-filter: blur(6px);
+    background:rgba(10,10,14,0.85);
   }
   #overlay label { display:block; font-size:12px; color:#aaa; margin-bottom:4px; }
-  #overlay .row { display:flex; gap:10px; margin-bottom:10px; align-items:center; }
+  #overlay .row { display:flex; gap:10px; margin-bottom:10px; align-items:center; flex-wrap:wrap; }
   #overlay input[type=number] { width:64px; padding:6px; border-radius:4px; border:1px solid #444; background:#1a1a1e; color:#eee; }
   #overlay input[type=file] { color:#ccc; font-size:12px; }
-  #overlay .btn {
-    padding:8px 14px; border-radius:6px; border:1px solid #555; background:#26262c; color:#eee;
+  .btn {
+    padding:10px 16px; border-radius:6px; border:1px solid #666; background:#26262c; color:#eee;
     font-size:13px;
   }
+  .btn.primary { background:#3f7fd9; border-color:#3f7fd9; font-weight:600; }
   #instructions {
     position:fixed; top:0; left:0; right:0; z-index:10; padding:14px 16px;
     background:linear-gradient(180deg, rgba(0,0,0,0.75), rgba(0,0,0,0));
     font-size:13px; color:#ddd; pointer-events:none;
   }
-  #arNotice { position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
-    text-align:center; padding:30px; font-size:15px; color:#ccc; z-index:5; }
+  #startScreen {
+    position:fixed; inset:0; z-index:20; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:16px; background:#0a0a0e; padding:24px; text-align:center;
+  }
+  #startScreen p { color:#aaa; font-size:13px; max-width:280px; line-height:1.5; }
 </style>
 </head>
 <body>
 
-<div id="instructions">Move your phone slowly to scan the wall. A white ring means a surface is found — tap it to hang your picture.</div>
+<div id="startScreen">
+  <h2 style="margin:0;">Wall Art Preview</h2>
+  <p>Uses your camera and motion sensor to float your picture in space. Won't stay perfectly pinned if you walk around, but shows scale and framing as you look around.</p>
+  <button class="btn primary" id="startBtn">Start Camera</button>
+</div>
 
-<div id="arNotice">Loading AR…</div>
+<div id="instructions" style="display:none;">Turn to look where you want the picture, then tap "Place Picture".</div>
 
-<div id="overlay">
+<video id="video" autoplay playsinline muted></video>
+<canvas id="three-canvas"></canvas>
+
+<div id="overlay" style="display:none;">
   <div class="row">
     <div>
       <label>Upload artwork photo</label>
@@ -51,15 +67,15 @@
       <label>Height (cm)</label>
       <input type="number" id="hCm" value="50" min="5" max="300">
     </div>
-    <button class="btn" id="clearBtn">Clear placed</button>
+    <button class="btn primary" id="placeBtn">Place Picture</button>
+    <button class="btn" id="clearBtn">Clear</button>
   </div>
 </div>
 
 <script type="importmap">
 {
   "imports": {
-    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
   }
 }
 </script>
@@ -67,61 +83,56 @@
 <script type="module">
 import * as THREE from 'three';
 
-let camera, scene, renderer, controller, reticle;
-let hitTestSource = null;
-let hitTestSourceRequested = false;
-let currentTexture = null;
+let scene, camera, renderer, currentTexture = null;
 const placed = [];
 
-init();
+const deviceQuat = new THREE.Quaternion();
+const screenTransform = new THREE.Quaternion();
+const worldTransform = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
 
-function init(){
+document.getElementById('startBtn').addEventListener('click', startApp);
+
+async function startApp(){
+  if (typeof DeviceOrientationEvent !== 'undefined' &&
+      typeof DeviceOrientationEvent.requestPermission === 'function') {
+    try { await DeviceOrientationEvent.requestPermission(); } catch(e) {}
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment' }, audio: false
+    });
+    document.getElementById('video').srcObject = stream;
+  } catch (err) {
+    alert('Camera failed: ' + err.message);
+    return;
+  }
+
+  document.getElementById('startScreen').style.display = 'none';
+  document.getElementById('overlay').style.display = 'block';
+  document.getElementById('instructions').style.display = 'block';
+
+  initThree();
+  window.addEventListener('deviceorientation', onDeviceOrientation);
+}
+
+function initThree(){
   scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 20);
+  camera = new THREE.PerspectiveCamera(65, window.innerWidth/window.innerHeight, 0.05, 100);
 
-  const light = new THREE.HemisphereLight(0xffffff, 0x444444, 1.2);
-  light.position.set(0.5, 1, 0.25);
+  const light = new THREE.HemisphereLight(0xffffff, 0x444444, 1.4);
   scene.add(light);
 
-  renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
+  const canvas = document.getElementById('three-canvas');
+  renderer = new THREE.WebGLRenderer({ canvas, alpha:true, antialias:true });
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.xr.enabled = true;
-  document.body.appendChild(renderer.domElement);
 
-  const arBtn = document.createElement('button');
-  arBtn.textContent = 'START AR';
-  arBtn.style.cssText = 'position:fixed; top:70px; left:50%; transform:translateX(-50%); z-index:30; padding:12px 24px; border:1px solid #fff; background:transparent; color:#fff; font-size:14px;';
-  document.body.appendChild(arBtn);
-  document.getElementById('arNotice').remove();
-
-  arBtn.addEventListener('click', async () => {
-    try {
-      const session = await navigator.xr.requestSession('immersive-ar', {
-        requiredFeatures: ['hit-test'],
-        optionalFeatures: ['dom-overlay'],
-        domOverlay: { root: document.body }
-      });
-      renderer.xr.setSession(session);
-      arBtn.style.display = 'none';
-    } catch (err) {
-      alert('AR failed to start: ' + err.message);
-    }
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
   });
-
-  reticle = new THREE.Mesh(
-    new THREE.RingGeometry(0.09, 0.11, 32).rotateX(-Math.PI/2),
-    new THREE.MeshBasicMaterial({ color: 0xffffff })
-  );
-  reticle.matrixAutoUpdate = false;
-  reticle.visible = false;
-  scene.add(reticle);
-
-  controller = renderer.xr.getController(0);
-  controller.addEventListener('select', onSelect);
-  scene.add(controller);
-
-  window.addEventListener('resize', onWindowResize);
 
   document.getElementById('imgInput').addEventListener('change', (e) => {
     const file = e.target.files[0];
@@ -136,25 +147,39 @@ function init(){
     reader.readAsDataURL(file);
   });
 
+  document.getElementById('placeBtn').addEventListener('click', placePicture);
   document.getElementById('clearBtn').addEventListener('click', () => {
     placed.forEach(m => scene.remove(m));
     placed.length = 0;
   });
 
-  renderer.setAnimationLoop(render);
+  animate();
 }
 
-function onWindowResize(){
-  camera.aspect = window.innerWidth/window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+function onDeviceOrientation(e){
+  const alpha = THREE.MathUtils.degToRad(e.alpha || 0);
+  const beta  = THREE.MathUtils.degToRad(e.beta || 0);
+  const gamma = THREE.MathUtils.degToRad(e.gamma || 0);
+  const orient = THREE.MathUtils.degToRad(window.orientation || 0);
+
+  const euler = new THREE.Euler();
+  euler.set(beta, alpha, -gamma, 'YXZ');
+  deviceQuat.setFromEuler(euler);
+  deviceQuat.multiply(worldTransform);
+  screenTransform.setFromAxisAngle(new THREE.Vector3(0,0,1), -orient);
+  deviceQuat.multiply(screenTransform);
+
+  camera.quaternion.copy(deviceQuat);
 }
 
-function onSelect(){
-  if (!reticle.visible) return;
+function placePicture(){
   const wCm = parseFloat(document.getElementById('wCm').value) || 40;
   const hCm = parseFloat(document.getElementById('hCm').value) || 50;
   const w = wCm / 100, h = hCm / 100;
+
+  const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+  const distance = 2.2;
+  const pos = forward.multiplyScalar(distance);
 
   const group = new THREE.Group();
 
@@ -171,40 +196,15 @@ function onSelect(){
   const mesh = new THREE.Mesh(geo, mat);
   group.add(mesh);
 
-  reticle.matrix.decompose(group.position, group.quaternion, group.scale);
+  group.position.copy(pos);
+  group.quaternion.copy(camera.quaternion);
+
   scene.add(group);
   placed.push(group);
 }
 
-function render(timestamp, frame){
-  if (frame){
-    const referenceSpace = renderer.xr.getReferenceSpace();
-    const session = renderer.xr.getSession();
-
-    if (!hitTestSourceRequested){
-      session.requestReferenceSpace('viewer').then((refSpace) => {
-        session.requestHitTestSource({ space: refSpace }).then((source) => {
-          hitTestSource = source;
-        });
-      });
-      session.addEventListener('end', () => {
-        hitTestSourceRequested = false;
-        hitTestSource = null;
-      });
-      hitTestSourceRequested = true;
-    }
-
-    if (hitTestSource){
-      const results = frame.getHitTestResults(hitTestSource);
-      if (results.length > 0){
-        const hit = results[0];
-        reticle.visible = true;
-        reticle.matrix.fromArray(hit.getPose(referenceSpace).transform.matrix);
-      } else {
-        reticle.visible = false;
-      }
-    }
-  }
+function animate(){
+  requestAnimationFrame(animate);
   renderer.render(scene, camera);
 }
 </script>
