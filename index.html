@@ -96,6 +96,9 @@ function init(){
     domOverlay: { root: document.body }
   });
   document.body.appendChild(arBtn);
+  arBtn.style.top = '70px';
+  arBtn.style.bottom = 'auto';
+  arBtn.style.zIndex = '30';
   document.getElementById('arNotice').remove();
 
   reticle = new THREE.Mesh(
