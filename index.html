@@ -66,7 +66,6 @@
 
 <script type="module">
 import * as THREE from 'three';
-import { ARButton } from 'three/addons/webxr/ARButton.js';
 
 let camera, scene, renderer, controller, reticle;
 let hitTestSource = null;
@@ -90,16 +89,25 @@ function init(){
   renderer.xr.enabled = true;
   document.body.appendChild(renderer.domElement);
 
-  const arBtn = ARButton.createButton(renderer, {
-    requiredFeatures: ['hit-test'],
-    optionalFeatures: ['dom-overlay'],
-    domOverlay: { root: document.body }
-  });
+  const arBtn = document.createElement('button');
+  arBtn.textContent = 'START AR';
+  arBtn.style.cssText = 'position:fixed; top:70px; left:50%; transform:translateX(-50%); z-index:30; padding:12px 24px; border:1px solid #fff; background:transparent; color:#fff; font-size:14px;';
   document.body.appendChild(arBtn);
-  arBtn.style.top = '70px';
-  arBtn.style.bottom = 'auto';
-  arBtn.style.zIndex = '30';
   document.getElementById('arNotice').remove();
+
+  arBtn.addEventListener('click', async () => {
+    try {
+      const session = await navigator.xr.requestSession('immersive-ar', {
+        requiredFeatures: ['hit-test'],
+        optionalFeatures: ['dom-overlay'],
+        domOverlay: { root: document.body }
+      });
+      renderer.xr.setSession(session);
+      arBtn.style.display = 'none';
+    } catch (err) {
+      alert('AR failed to start: ' + err.message);
+    }
+  });
 
   reticle = new THREE.Mesh(
     new THREE.RingGeometry(0.09, 0.11, 32).rotateX(-Math.PI/2),
